@@ -16,8 +16,7 @@ $ go run main.go -token=$GITHUB_TOKEN -mountpoint=/github
 While that runs, in another terminal, list repos owned by a user or organization:
 
 ```
-$ cd /github
-$ ls golang/
+$ ls /github/golang/
 appengine
 arch
 benchmarks
@@ -28,15 +27,17 @@ blog
 You can inspect a repo's branches and tags as subdirectories of the repo:
 
 ```
-$ ls golang/go
+$ ls /github/golang/go
+...
 master
+...
 ```
 
 And you can inspect the directories and files in the repo at those branches or
 tags:
 
 ```
-$ ls golang/go/master
+$ ls /github/golang/go/master
 AUTHORS
 CONTRIBUTING.md
 CONTRIBUTORS
@@ -47,7 +48,7 @@ LICENSE
 If you know the specific revision you want to explore, you can use that instead of a branch or tag name:
 
 ```
-$ ls golang/go/3d1f8c237956ca657b9517040a7431e87f9d8a18
+$ ls /github/golang/go/3d1f8c237956ca657b9517040a7431e87f9d8a18
 AUTHORS
 CONTRIBUTING.md
 CONTRIBUTORS
@@ -58,14 +59,13 @@ LICENSE
 Or use any unique prefix of the revision SHA:
 
 ```
-$ ls golang/go/3d1f8c23
+$ ls /github/golang/go/3d1f8c23
 ```
-
 
 At a revision/branch/tag, you can explore the repo and read files:
 
 ```
-$ cat golang/go/master/src/bytes/bytes.go
+$ cat /github/golang/go/master/src/bytes/bytes.go
 // Copyright 2009 The Go Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
@@ -82,19 +82,19 @@ import (
 ```
 
 ```
-$ wc -l golang/go/master/src/bytes/bytes.go
-     714 golang/go/master/src/bytes/bytes.go
+$ wc -l /github/golang/go/master/src/bytes/bytes.go
+     714 /github/golang/go/master/src/bytes/bytes.go
 ```
 
 ```
-$ grep -n TODO golang/go/master/src/bytes/bytes.go
+$ grep -n TODO /github/golang/go/master/src/bytes/bytes.go
 429:// TODO: update when package unicode captures more of the properties.
 ```
 
 ```
 $ diff \
-  golang/go/89454b1c/src/bytes/bytes.go \
-  golang/go/3d1f8c23/src/bytes/bytes.go
+  /github/golang/go/89454b1c/src/bytes/bytes.go \
+  /github/golang/go/3d1f8c23/src/bytes/bytes.go
 140a141,150
 > // LastIndexByte returns the index of the last instance of c in s, or -1 if c is not present in s.
 > func LastIndexByte(s []byte, c byte) int {
