@@ -1,5 +1,6 @@
 // TODO: don't hold on to everything forever.
-// TODO: better auth story, prompt for oauth access and store it somewhere.
+// TODO: support gists.
+// TODO: better auth story; prompt for oauth access and store it somewhere.
 // TODO: support writing files if the ref is a branch.
 // TODO: better docs, examples, tests, the usual.
 package main
@@ -231,10 +232,13 @@ func (d *repoDir) Lookup(_ context.Context, name string) (fs.Node, error) {
 			return &contentDir{repoDir: d, ref: r}, nil
 		}
 	}
-	// TODO: Something is wonky with the GitHub API returning whether or
-	// not a commit exists in the repo. For now just always guess it
-	// exists and if it doesn't we'll find out later when we try to get a
-	// file from it.
+	// Always return a contentDir, even if there isn't a branch/tag by that
+	// name. This allows users to use a commit SHA as a directory name, and
+	// further lookups will just use that SHA. If no commit exists with
+	// that SHA, future failures will make that apparent.
+	// TODO: only return a SHA dir if the name is [0-9a-f]+
+	// TODO: actually look up whether the repo contains any commits with
+	// the SHA.
 	return &contentDir{repoDir: d, ref: name}, nil
 }
 
