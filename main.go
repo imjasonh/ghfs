@@ -111,7 +111,7 @@ func (*rootDir) ReadDirAll(context.Context) ([]fuse.Dirent, error) {
 // userDir serves directories containing a user/org's repos.
 type userDir struct {
 	user  string
-	repos []string
+	repos map[string]bool
 	err   error
 }
 
@@ -120,6 +120,7 @@ func (d *userDir) getRepos() {
 	if d.repos != nil {
 		return
 	}
+	d.repos = map[string]bool{}
 	repos, resp, err := client.Repositories.List(d.user, nil)
 	// Ignore 404s, it may just mean the user is an org.
 	if err != nil && resp.StatusCode != http.StatusNotFound {
@@ -128,7 +129,7 @@ func (d *userDir) getRepos() {
 		return
 	}
 	for _, r := range repos {
-		d.repos = append(d.repos, *r.Name)
+		d.repos[*r.Name] = true
 	}
 
 	// Also check if the repos-by-org API returns any repos; there seem to
@@ -143,7 +144,7 @@ func (d *userDir) getRepos() {
 		return
 	}
 	for _, r := range byOrg {
-		d.repos = append(d.repos, *r.Name)
+		d.repos[*r.Name] = true
 	}
 }
 
@@ -164,10 +165,8 @@ func (d *userDir) Lookup(_ context.Context, name string) (fs.Node, error) {
 	if d.err != nil {
 		return nil, fuse.ENOENT
 	}
-	for _, r := range d.repos {
-		if name == r {
-			return &repoDir{userDir: d, repo: r}, nil
-		}
+	if d.repos[name] {
+		return &repoDir{userDir: d, repo: name}, nil
 	}
 	return nil, fuse.ENOENT
 }
@@ -179,7 +178,7 @@ func (d *userDir) ReadDirAll(context.Context) ([]fuse.Dirent, error) {
 		return nil, fuse.ENOENT
 	}
 	var ents []fuse.Dirent
-	for _, r := range d.repos {
+	for r, _ := range d.repos {
 		ents = append(ents, fuse.Dirent{Name: r, Type: fuse.DT_Dir})
 	}
 	return ents, nil
@@ -272,7 +271,7 @@ func (d *repoDir) ReadDirAll(context.Context) ([]fuse.Dirent, error) {
 type contentDir struct {
 	*repoDir
 	ref, path   string
-	files, dirs []string
+	files, dirs map[string]bool
 }
 
 // getContents populates the cache of contents belonging at this path in the
@@ -285,6 +284,7 @@ func (d *contentDir) getContents() {
 	if d.files != nil || d.dirs != nil {
 		return
 	}
+	d.files, d.dirs = map[string]bool{}, map[string]bool{}
 	_, contents, _, err := client.Repositories.GetContents(d.user, d.repo, d.path, &github.RepositoryContentGetOptions{d.ref})
 	if err != nil {
 		d.err = err
@@ -293,9 +293,9 @@ func (d *contentDir) getContents() {
 	}
 	for _, c := range contents {
 		if *c.Type == "file" {
-			d.files = append(d.files, *c.Name)
+			d.files[*c.Name] = true
 		} else if *c.Type == "dir" {
-			d.dirs = append(d.dirs, *c.Name)
+			d.dirs[*c.Name] = true
 		}
 	}
 }
@@ -316,15 +316,11 @@ func (d *contentDir) Lookup(_ context.Context, name string) (fs.Node, error) {
 	if d.err != nil {
 		return nil, fuse.ENOENT
 	}
-	for _, f := range d.files {
-		if name == f {
-			return &contentFile{contentDir: d, filename: name}, nil
-		}
+	if d.files[name] {
+		return &contentFile{contentDir: d, filename: name}, nil
 	}
-	for _, dr := range d.dirs {
-		if name == dr {
-			return &contentDir{repoDir: d.repoDir, ref: d.ref, path: filepath.Join(d.path, name)}, nil
-		}
+	if d.dirs[name] {
+		return &contentDir{repoDir: d.repoDir, ref: d.ref, path: filepath.Join(d.path, name)}, nil
 	}
 	return nil, fuse.ENOENT
 }
@@ -336,10 +332,10 @@ func (d *contentDir) ReadDirAll(context.Context) ([]fuse.Dirent, error) {
 		return nil, fuse.ENOENT
 	}
 	var ents []fuse.Dirent
-	for _, d := range d.dirs {
+	for d, _ := range d.dirs {
 		ents = append(ents, fuse.Dirent{Name: d, Type: fuse.DT_Dir})
 	}
-	for _, f := range d.files {
+	for f, _ := range d.files {
 		ents = append(ents, fuse.Dirent{Name: f, Type: fuse.DT_File})
 	}
 	return ents, nil
