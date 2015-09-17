@@ -7,8 +7,8 @@ package main
 
 import (
 	"encoding/base64"
-	"errors"
 	"flag"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -54,6 +54,7 @@ func main() {
 	}
 	defer c.Close()
 
+	log.Println("serving...")
 	if err := fs.Serve(c, FS{}); err != nil {
 		log.Printf("serve: %v", err)
 		os.Exit(1)
@@ -317,7 +318,7 @@ func (d *contentDir) Lookup(_ context.Context, name string) (fs.Node, error) {
 	}
 	for _, f := range d.files {
 		if name == f {
-			return &contentFile{contentDir: d, filename: filepath.Join(d.path, name)}, nil
+			return &contentFile{contentDir: d, filename: name}, nil
 		}
 	}
 	for _, dr := range d.dirs {
@@ -364,8 +365,8 @@ func (d *contentFile) getFile() {
 		return
 	}
 	if contents == nil || contents.Content == nil {
-		d.err = errors.New("nil content")
-		log.Println(err)
+		d.err = fmt.Errorf("nil content: %s", path)
+		log.Println(d.err)
 		return
 	}
 	if *contents.Encoding == "base64" {
