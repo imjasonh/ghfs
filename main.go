@@ -42,12 +42,12 @@ func main() {
 	client = github.NewClient(oauth2.NewClient(oauth2.NoContext, oauth2.StaticTokenSource(
 		&oauth2.Token{AccessToken: *token},
 	)))
-
-	mp := *mountpoint
-	if mp == "" {
-		mp, _ = filepath.Abs(filepath.Dir(os.Args[0]))
+	
+	if *mountpoint == "" {
+		log.Println("must provide -mountpoint")
+		os.Exit(1)
 	}
-	c, err := fuse.Mount(mp)
+	c, err := fuse.Mount(*mountpoint)
 	if err != nil {
 		log.Printf("mount: %v", err)
 		os.Exit(1)
