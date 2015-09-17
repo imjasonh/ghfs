@@ -108,10 +108,17 @@ $ diff \
 > 
 ```
 
+# :warning: Caveats :warning:
+
+* **This is a toy**, and is not intended for anything like production use.
+* The GitHub API is rate-limited, and this makes a lot of API calls. Don't be
+  surprised if things start to fall apart under load.
+* I'm not responsible for this somehow breaking free and ruining your garden
+  party.
+
 ----------
 
-License
------
+# License
 
     Copyright 2015 Jason Hall
 
