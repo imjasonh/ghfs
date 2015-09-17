@@ -9,6 +9,7 @@ import (
 	"errors"
 	"flag"
 	"log"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -88,6 +89,10 @@ func (*rootDir) Lookup(_ context.Context, name string) (fs.Node, error) {
 	if _, _, err := client.Users.Get(name); err == nil {
 		return &userDir{user: name}, nil
 	}
+	// If it wasn't a user name, try it as an org name.
+	if _, _, err := client.Organizations.Get(name); err == nil {
+		return &userDir{user: name}, nil
+	}
 	return nil, fuse.ENOENT
 }
 
@@ -109,12 +114,27 @@ func (d *userDir) getRepos() error {
 	if d.repos != nil {
 		return nil
 	}
-	repos, _, err := client.Repositories.List(d.user, nil)
-	if err != nil {
+	repos, resp, err := client.Repositories.List(d.user, nil)
+	// Ignore 404s, it may just mean the user is an org.
+	if err != nil && resp.StatusCode != http.StatusNotFound {
 		log.Println(err)
 		return err
 	}
 	for _, r := range repos {
+		d.repos = append(d.repos, *r.Name)
+	}
+
+	// Also check if the repos-by-org API returns any repos; there seem to
+	// be inconsistent results for orgs, e.g.:
+	// https://api.github.com/users/google/repos vs.
+	// https://api.github.com/orgs/google/repos
+	byOrg, resp, err := client.Repositories.ListByOrg(d.user, nil)
+	// Ignore 404s, it may just mean the org is only a user.
+	if err != nil && resp.StatusCode != http.StatusNotFound {
+		log.Println(err)
+		return err
+	}
+	for _, r := range byOrg {
 		d.repos = append(d.repos, *r.Name)
 	}
 	return nil
@@ -149,7 +169,7 @@ func (d *userDir) ReadDirAll(context.Context) ([]fuse.Dirent, error) {
 	if err := d.getRepos(); err != nil {
 		return nil, fuse.ENOENT
 	}
-	ents := []fuse.Dirent{}
+	var ents []fuse.Dirent
 	for _, r := range d.repos {
 		ents = append(ents, fuse.Dirent{Name: r, Type: fuse.DT_Dir})
 	}
@@ -223,7 +243,7 @@ func (d *repoDir) ReadDirAll(context.Context) ([]fuse.Dirent, error) {
 	if err := d.getRefs(); err != nil {
 		return nil, fuse.ENOENT
 	}
-	ents := []fuse.Dirent{}
+	var ents []fuse.Dirent
 	for _, r := range d.refs {
 		ents = append(ents, fuse.Dirent{Name: r, Type: fuse.DT_Dir})
 	}
@@ -295,7 +315,7 @@ func (d *contentDir) ReadDirAll(context.Context) ([]fuse.Dirent, error) {
 	if err := d.getContents(); err != nil {
 		return nil, fuse.ENOENT
 	}
-	ents := []fuse.Dirent{}
+	var ents []fuse.Dirent
 	for _, d := range d.dirs {
 		ents = append(ents, fuse.Dirent{Name: d, Type: fuse.DT_Dir})
 	}
