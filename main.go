@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"bazil.org/fuse"
@@ -25,6 +26,8 @@ import (
 var (
 	token      = flag.String("token", "", "GitHub auth token")
 	mountpoint = flag.String("mountpoint", "", "Mount point, default is current working directory")
+
+	shaRE = regexp.MustCompile(`^[0-9a-f]+$`)
 
 	client *github.Client
 )
@@ -185,7 +188,7 @@ func (d *userDir) ReadDirAll(context.Context) ([]fuse.Dirent, error) {
 type repoDir struct {
 	*userDir
 	repo string
-	refs []string
+	refs map[string]bool
 	err  error
 }
 
@@ -197,6 +200,7 @@ func (d *repoDir) getRefs() {
 	if d.refs != nil {
 		return
 	}
+	d.refs = map[string]bool{}
 	tags, _, err := client.Repositories.ListTags(d.user, d.repo, nil)
 	if err != nil {
 		d.err = err
@@ -204,7 +208,7 @@ func (d *repoDir) getRefs() {
 		return
 	}
 	for _, t := range tags {
-		d.refs = append(d.refs, *t.Name)
+		d.refs[*t.Name] = true
 	}
 	branches, _, err := client.Repositories.ListBranches(d.user, d.repo, nil)
 	if err != nil {
@@ -213,7 +217,7 @@ func (d *repoDir) getRefs() {
 		return
 	}
 	for _, b := range branches {
-		d.refs = append(d.refs, *b.Name)
+		d.refs[*b.Name] = true
 	}
 }
 
@@ -234,16 +238,17 @@ func (d *repoDir) Lookup(_ context.Context, name string) (fs.Node, error) {
 	if d.err != nil {
 		return nil, fuse.ENOENT
 	}
-	for _, r := range d.refs {
-		if name == r {
-			return &contentDir{repoDir: d, ref: r}, nil
-		}
+	if d.refs[name] {
+		return &contentDir{repoDir: d, ref: name}, nil
 	}
 	// Always return a contentDir, even if there isn't a branch/tag by that
 	// name. This allows users to use a commit SHA as a directory name, and
 	// further lookups will just use that SHA. If no commit exists with
 	// that SHA, future failures will make that apparent.
-	// TODO: only return a SHA dir if the name is [0-9a-f]+
+	if !shaRE.MatchString(name) {
+		// Only return a SHA dir if the name could possibly be a SHA.
+		return nil, fuse.ENOENT
+	}
 	// TODO: actually look up whether the repo contains any commits with
 	// the SHA.
 	return &contentDir{repoDir: d, ref: name}, nil
@@ -256,7 +261,7 @@ func (d *repoDir) ReadDirAll(context.Context) ([]fuse.Dirent, error) {
 		return nil, fuse.ENOENT
 	}
 	var ents []fuse.Dirent
-	for _, r := range d.refs {
+	for r, _ := range d.refs {
 		ents = append(ents, fuse.Dirent{Name: r, Type: fuse.DT_Dir})
 	}
 	return ents, nil
