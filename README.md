@@ -1,4 +1,4 @@
-# GHFS - GitHub repos in your filesystem!
+ GHFS - GitHub repos in your filesystem!
 
 GHFS mounts to a directory using FUSE and serves contents of GitHub repos
 on-demand.
@@ -55,6 +55,13 @@ LICENSE
 ...
 ```
 
+Or use any unique prefix of the revision SHA:
+
+```
+$ ls golang/go/3d1f8c23
+```
+
+
 At a revision/branch/tag, you can explore the repo and read files:
 
 ```
@@ -86,8 +93,8 @@ $ grep -n TODO golang/go/master/src/bytes/bytes.go
 
 ```
 $ diff \
-  golang/go/89454b1c390ce0659a4311f4a23642f952d9f574/src/bytes/bytes.go \
-  golang/go/3d1f8c237956ca657b9517040a7431e87f9d8a18/src/bytes/bytes.go
+  golang/go/89454b1c/src/bytes/bytes.go \
+  golang/go/3d1f8c23/src/bytes/bytes.go
 140a141,150
 > // LastIndexByte returns the index of the last instance of c in s, or -1 if c is not present in s.
 > func LastIndexByte(s []byte, c byte) int {
