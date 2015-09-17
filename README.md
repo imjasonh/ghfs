@@ -83,3 +83,20 @@ $ wc -l golang/go/master/src/bytes/bytes.go
 $ grep -n TODO golang/go/master/src/bytes/bytes.go
 429:// TODO: update when package unicode captures more of the properties.
 ```
+
+```
+$ diff \
+  /Users/jasonhall/github/golang/go/89454b1c390ce0659a4311f4a23642f952d9f574/src/bytes/bytes.go \
+  /Users/jasonhall/github/golang/go/3d1f8c237956ca657b9517040a7431e87f9d8a18/src/bytes/bytes.go
+140a141,150
+> // LastIndexByte returns the index of the last instance of c in s, or -1 if c is not present in s.
+> func LastIndexByte(s []byte, c byte) int {
+> 	for i := len(s) - 1; i >= 0; i-- {
+> 		if s[i] == c {
+> 			return i
+> 		}
+> 	}
+> 	return -1
+> }
+> 
+```
