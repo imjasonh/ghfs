@@ -108,18 +108,20 @@ func (*rootDir) ReadDirAll(context.Context) ([]fuse.Dirent, error) {
 type userDir struct {
 	user  string
 	repos []string
+	err   error
 }
 
 // getRepos populates the cache of user's repos if necessary.
-func (d *userDir) getRepos() error {
+func (d *userDir) getRepos() {
 	if d.repos != nil {
-		return nil
+		return
 	}
 	repos, resp, err := client.Repositories.List(d.user, nil)
 	// Ignore 404s, it may just mean the user is an org.
 	if err != nil && resp.StatusCode != http.StatusNotFound {
+		d.err = err
 		log.Println(err)
-		return err
+		return
 	}
 	for _, r := range repos {
 		d.repos = append(d.repos, *r.Name)
@@ -132,13 +134,13 @@ func (d *userDir) getRepos() error {
 	byOrg, resp, err := client.Repositories.ListByOrg(d.user, nil)
 	// Ignore 404s, it may just mean the org is only a user.
 	if err != nil && resp.StatusCode != http.StatusNotFound {
+		d.err = err
 		log.Println(err)
-		return err
+		return
 	}
 	for _, r := range byOrg {
 		d.repos = append(d.repos, *r.Name)
 	}
-	return nil
 }
 
 // Attr states that a userDir represents a directory.
@@ -154,7 +156,8 @@ func (d *userDir) Lookup(_ context.Context, name string) (fs.Node, error) {
 	if strings.ContainsRune(name, '.') { // Repos can't contain '.'
 		return nil, fuse.ENOENT
 	}
-	if err := d.getRepos(); err != nil {
+	d.getRepos()
+	if d.err != nil {
 		return nil, fuse.ENOENT
 	}
 	for _, r := range d.repos {
@@ -167,7 +170,8 @@ func (d *userDir) Lookup(_ context.Context, name string) (fs.Node, error) {
 
 // ReadDirAll returns a list of user's repos.
 func (d *userDir) ReadDirAll(context.Context) ([]fuse.Dirent, error) {
-	if err := d.getRepos(); err != nil {
+	d.getRepos()
+	if d.err != nil {
 		return nil, fuse.ENOENT
 	}
 	var ents []fuse.Dirent
@@ -182,33 +186,35 @@ type repoDir struct {
 	*userDir
 	repo string
 	refs []string
+	err  error
 }
 
 // getRefs populates the cache of possible refs if necessary.
 //
 // TODO: the values of these refs may change if the FS is mounted long-term;
 // periodically refresh the list of refs and release things under them.
-func (d *repoDir) getRefs() error {
+func (d *repoDir) getRefs() {
 	if d.refs != nil {
-		return nil
+		return
 	}
 	tags, _, err := client.Repositories.ListTags(d.user, d.repo, nil)
 	if err != nil {
+		d.err = err
 		log.Println(err)
-		return err
+		return
 	}
 	for _, t := range tags {
 		d.refs = append(d.refs, *t.Name)
 	}
 	branches, _, err := client.Repositories.ListBranches(d.user, d.repo, nil)
 	if err != nil {
+		d.err = err
 		log.Println(err)
-		return err
+		return
 	}
 	for _, b := range branches {
 		d.refs = append(d.refs, *b.Name)
 	}
-	return nil
 }
 
 // Attr states that a repoDir is a directory.
@@ -224,7 +230,8 @@ func (d *repoDir) Lookup(_ context.Context, name string) (fs.Node, error) {
 	if strings.ContainsRune(name, '.') { // refs can't contain '.'
 		return nil, fuse.ENOENT
 	}
-	if err := d.getRefs(); err != nil {
+	d.getRefs()
+	if d.err != nil {
 		return nil, fuse.ENOENT
 	}
 	for _, r := range d.refs {
@@ -244,7 +251,8 @@ func (d *repoDir) Lookup(_ context.Context, name string) (fs.Node, error) {
 
 // ReadDirAll returns a list of repo's refs.
 func (d *repoDir) ReadDirAll(context.Context) ([]fuse.Dirent, error) {
-	if err := d.getRefs(); err != nil {
+	d.getRefs()
+	if d.err != nil {
 		return nil, fuse.ENOENT
 	}
 	var ents []fuse.Dirent
@@ -267,14 +275,15 @@ type contentDir struct {
 // TODO: contents may change if the FS is mounted long-term (e.g., the parent
 // ref "master" changes or is deleted); periodically refresh the contents and
 // release things under them.
-func (d *contentDir) getContents() error {
+func (d *contentDir) getContents() {
 	if d.files != nil || d.dirs != nil {
-		return nil
+		return
 	}
 	_, contents, _, err := client.Repositories.GetContents(d.user, d.repo, d.path, &github.RepositoryContentGetOptions{d.ref})
 	if err != nil {
+		d.err = err
 		log.Println(err)
-		return err
+		return
 	}
 	for _, c := range contents {
 		if *c.Type == "file" {
@@ -283,7 +292,6 @@ func (d *contentDir) getContents() error {
 			d.dirs = append(d.dirs, *c.Name)
 		}
 	}
-	return nil
 }
 
 // Attr states that a contentDir is a directory.
@@ -298,7 +306,8 @@ func (d *contentDir) Attr(_ context.Context, attr *fuse.Attr) error {
 // to a directory in the repo, or it may be a contentFile if it points to a
 // file in the repo.
 func (d *contentDir) Lookup(_ context.Context, name string) (fs.Node, error) {
-	if err := d.getContents(); err != nil {
+	d.getContents()
+	if d.err != nil {
 		return nil, fuse.ENOENT
 	}
 	for _, f := range d.files {
@@ -316,7 +325,8 @@ func (d *contentDir) Lookup(_ context.Context, name string) (fs.Node, error) {
 
 // ReadDirAll returns a list of directories and files in the repo at the ref.
 func (d *contentDir) ReadDirAll(context.Context) ([]fuse.Dirent, error) {
-	if err := d.getContents(); err != nil {
+	d.getContents()
+	if d.err != nil {
 		return nil, fuse.ENOENT
 	}
 	var ents []fuse.Dirent
@@ -337,36 +347,42 @@ type contentFile struct {
 }
 
 // getFile populates the cache of file contents if necessary.
-func (d *contentFile) getFile() error {
+func (d *contentFile) getFile() {
+	if d.content != nil {
+		return
+	}
 	path := filepath.Join(d.path, d.filename)
 	contents, _, _, err := client.Repositories.GetContents(d.user, d.repo, path, &github.RepositoryContentGetOptions{d.ref})
 	if err != nil {
+		d.err = err
 		log.Println(err)
-		return err
+		return
 	}
 	if contents == nil || contents.Content == nil {
-		log.Println("nil content")
-		return errors.New("nil content")
+		d.err = errors.New("nil content")
+		log.Println(err)
+		return
 	}
 	if *contents.Encoding == "base64" {
 		l := base64.StdEncoding.DecodedLen(len(*contents.Content))
 		d.content = make([]byte, l)
 		n, err := base64.StdEncoding.Decode(d.content, []byte(*contents.Content))
 		if err != nil {
+			d.err = err
 			log.Println(err)
-			return err
+			return
 		}
 		d.content = d.content[0:n] // trim any padding
 	} else {
 		d.content = []byte(*contents.Content)
 	}
-	return nil
 }
 
 // Attr states that contentFile is a file and provides its size.
 func (d *contentFile) Attr(_ context.Context, attr *fuse.Attr) error {
-	if err := d.getFile(); err != nil {
-		// It's a file; we don't know its size.
+	d.getFile()
+	if d.err != nil {
+		// It's a file, we just don't know its size.
 		*attr = fuse.Attr{Mode: os.FileMode(0) | 0555}
 	} else {
 		*attr = fuse.Attr{Size: uint64(len(d.content)), Mode: os.FileMode(0) | 0555}
@@ -376,7 +392,8 @@ func (d *contentFile) Attr(_ context.Context, attr *fuse.Attr) error {
 
 // ReadAll returns all of the file's contents.
 func (d *contentFile) ReadAll(context.Context) ([]byte, error) {
-	if err := d.getFile(); err != nil {
+	d.getFile()
+	if d.err != nil {
 		return nil, fuse.ENOENT
 	}
 	return d.content, nil
@@ -384,9 +401,9 @@ func (d *contentFile) ReadAll(context.Context) ([]byte, error) {
 
 // Read responds with a possible subset of the file's contents.
 func (d *contentFile) Read(_ context.Context, req *fuse.ReadRequest, resp *fuse.ReadResponse) error {
-	if err := d.getFile(); err != nil {
-		log.Println(err)
-		return err
+	d.getFile()
+	if d.err != nil {
+		return fuse.ENOENT
 	}
 	*resp = fuse.ReadResponse{
 		Data: d.content[req.Offset : req.Offset+int64(req.Size)],
