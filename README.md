@@ -1,4 +1,4 @@
- GHFS - GitHub repos in your filesystem!
+# GHFS - GitHub repos in your filesystem!
 
 GHFS mounts to a directory using FUSE and serves contents of GitHub repos
 on-demand.
